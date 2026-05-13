@@ -1,2 +1,5 @@
 .idea
 /target
+/limine
+/esp/EFI/BOOT
+/esp/EFI/vados
