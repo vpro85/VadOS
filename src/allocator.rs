@@ -123,3 +123,38 @@ impl BitmapAllocator {
         self.total_pages
     }
 }
+
+/// Обертка для хранения аллокатора в статике без static mut
+pub struct AllocatorCell {
+    inner: core::cell::UnsafeCell<BitmapAllocator>,
+}
+
+unsafe impl Sync for AllocatorCell {}
+
+impl AllocatorCell {
+    pub const fn new() -> Self {
+        Self {
+            inner: core::cell::UnsafeCell::new(BitmapAllocator::new()),
+        }
+    }
+
+    pub unsafe fn init(&self, entries: &[&limine::memmap::Entry]) {
+        unsafe { (*self.inner.get()).init(entries) }
+    }
+
+    pub unsafe fn alloc_frame(&self) -> Option<u64> {
+        unsafe { (*self.inner.get()).alloc_frame() }
+    }
+
+    pub unsafe fn free_frame(&self, addr: u64) {
+        unsafe { (*self.inner.get()).free_frame(addr) }
+    }
+
+    pub unsafe fn free_pages(&self) -> usize {
+        unsafe { (*self.inner.get()).free_pages() }
+    }
+
+    pub unsafe fn total_pages(&self) -> usize {
+        unsafe { (*self.inner.get()).total_pages() }
+    }
+}
