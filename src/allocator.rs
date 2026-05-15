@@ -93,4 +93,33 @@ impl BitmapAllocator {
             }
         }
     }
+
+    /// Выделить одну физическую страницу, вернув её адрес
+    pub fn alloc_frame(&mut self) -> Option<u64> {
+        for page in 0..self.total_pages {
+            if !self.test_bit(page) {
+                self.set_bit(page);
+                self.free_pages -= 1;
+                return Some(page as u64 * PAGE_SIZE);
+            }
+        }
+        None
+    }
+
+    /// Освободить страницу по физическому адресу
+    pub fn free_frame(&mut self, addr: u64) {
+        let page = (addr / PAGE_SIZE) as usize;
+        assert!(page < self.total_pages, "free_frame: address out of range");
+        assert!(self.test_bit(page), "free_frame: page already free");
+        self.clear_bit(page);
+        self.free_pages += 1;
+    }
+
+    pub fn free_pages(&self) -> usize {
+        self.free_pages
+    }
+
+    pub fn total_pages(&self) -> usize {
+        self.total_pages
+    }
 }
