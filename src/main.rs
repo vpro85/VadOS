@@ -7,6 +7,7 @@ use limine::memmap;
 use limine::BaseRevision;
 
 pub mod serial;
+pub mod allocator;
 
 // Говорим Limine, что поддерживаем протокол версии 3
 #[used]
