@@ -2,7 +2,7 @@
 #![no_main]
 
 use core::panic::PanicInfo;
-use limine::request::{BootloaderInfoRequest, MemmapRequest};
+use limine::request::{BootloaderInfoRequest, HhdmRequest, MemmapRequest};
 use limine::BaseRevision;
 
 pub mod allocator;
@@ -22,16 +22,32 @@ static MEMORY_MAP: MemmapRequest = MemmapRequest::new();
 #[used]
 static ALLOCATOR: allocator::AllocatorCell = allocator::AllocatorCell::new();
 
+#[used]
+static HHDM: HhdmRequest = HhdmRequest::new();
+
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    println!("VadOS kernel starting...");
-    let mmap = MEMORY_MAP
+    println!("step 1: serial ok");
+
+    let mmap = MEMORY_MAP.response();
+    println!("step 2: mmap response = {}", if mmap.is_some() { "OK" } else { "NONE" });
+
+
+    let mmap = mmap.expect("no memory map from Limine");
+    let entries = mmap.entries();
+    println!("step 3: entries count = {}", entries.len());
+
+    let hhdm_offset = HHDM
         .response()
-        .expect("no memory map from Limine");
+        .expect("no HHDM from Limine")
+        .offset;
+
+    println!("step 3.5: HHDM offset = 0x{:x}", hhdm_offset);
 
     unsafe {
-        ALLOCATOR.init(mmap.entries());
+        ALLOCATOR.init(entries, hhdm_offset);
     }
+    println!("step 4: allocator init ok");
 
     println!(
         "Memory: {} MB free / {} MB total",

@@ -38,10 +38,8 @@ impl BitmapAllocator {
         }
     }
 
-    /// Инициализация аллокатора по memory map от Limine
-    pub unsafe fn init(&mut self, entries: &[&limine::memmap::Entry]) {
+    pub unsafe fn init(&mut self, entries: &[&limine::memmap::Entry], hhdm_offset: u64) {
         unsafe {
-            // Найдём максимальный физический адрес
             let mut max_addr: u64 = 0;
             for entry in entries {
                 let end = entry.base + entry.length;
@@ -50,40 +48,43 @@ impl BitmapAllocator {
                 }
             }
 
-            // Считаем сколько страниц и байт нужно для bitmap
             self.total_pages = (max_addr / PAGE_SIZE) as usize;
             self.bitmap_size = (self.total_pages + 7) / 8;
 
-            // Ищем первый Usable регион достаточного размера для bitmap
+            // Ищем первый Usable регион для bitmap
+            let mut bitmap_phys: u64 = 0;
             for entry in entries.iter() {
                 if entry.type_ == limine::memmap::MEMMAP_USABLE
-                    && entry.length >= self.bitmap_size as u64 {
-                    self.bitmap = entry.base as *mut u8;
+                    && entry.length >= self.bitmap_size as u64
+                {
+                    bitmap_phys = entry.base;
                     break;
                 }
             }
 
-            assert!(!self.bitmap.is_null(), "no space for bitmap");
+            assert!(bitmap_phys != 0, "no space for bitmap");
 
-            // Помечаем всё как занятое (все биты = 1)
+            // Виртуальный адрес = физический + HHDM смещение
+            self.bitmap = (bitmap_phys + hhdm_offset) as *mut u8;
+
+            // Помечаем всё как занятое
             core::ptr::write_bytes(self.bitmap, 0xFF, self.bitmap_size);
 
-            // Освобождаем только Usable регионы
+            // Освобождаем Usable регионы
             for entry in entries {
                 if entry.type_ == limine::memmap::MEMMAP_USABLE {
                     let start_page = (entry.base / PAGE_SIZE) as usize;
                     let end_page = ((entry.base + entry.length) / PAGE_SIZE) as usize;
                     for page in start_page..end_page {
-                        self.set_bit(page);
+                        self.clear_bit(page);
                         self.free_pages += 1;
                     }
                 }
             }
 
             // Помечаем страницы самого bitmap как занятые
-            let bitmap_start = self.bitmap as u64;
-            let bitmap_end = bitmap_start + self.bitmap_size as u64;
-            let start_page = (bitmap_start / PAGE_SIZE) as usize;
+            let bitmap_end = bitmap_phys + self.bitmap_size as u64;
+            let start_page = (bitmap_phys / PAGE_SIZE) as usize;
             let end_page = ((bitmap_end + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
             for page in start_page..end_page {
                 if !self.test_bit(page) {
@@ -94,7 +95,6 @@ impl BitmapAllocator {
         }
     }
 
-    /// Выделить одну физическую страницу, вернув её адрес
     pub fn alloc_frame(&mut self) -> Option<u64> {
         for page in 0..self.total_pages {
             if !self.test_bit(page) {
@@ -106,7 +106,6 @@ impl BitmapAllocator {
         None
     }
 
-    /// Освободить страницу по физическому адресу
     pub fn free_frame(&mut self, addr: u64) {
         let page = (addr / PAGE_SIZE) as usize;
         assert!(page < self.total_pages, "free_frame: address out of range");
@@ -124,7 +123,6 @@ impl BitmapAllocator {
     }
 }
 
-/// Обертка для хранения аллокатора в статике без static mut
 pub struct AllocatorCell {
     inner: core::cell::UnsafeCell<BitmapAllocator>,
 }
@@ -138,8 +136,8 @@ impl AllocatorCell {
         }
     }
 
-    pub unsafe fn init(&self, entries: &[&limine::memmap::Entry]) {
-        unsafe { (*self.inner.get()).init(entries) }
+    pub unsafe fn init(&self, entries: &[&limine::memmap::Entry], hhdm_offset: u64) {
+        unsafe { (*self.inner.get()).init(entries, hhdm_offset) }
     }
 
     pub unsafe fn alloc_frame(&self) -> Option<u64> {
