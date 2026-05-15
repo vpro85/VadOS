@@ -38,21 +38,29 @@ impl BitmapAllocator {
         }
     }
 
-    pub unsafe fn init(&mut self, entries: &[&limine::memmap::Entry], hhdm_offset: u64) {
-        unsafe {
-            let mut max_addr: u64 = 0;
-            for entry in entries {
-                if entry.type_ == limine::memmap::MEMMAP_USABLE {
-                    let end = entry.base + entry.length;
-                    if end > max_addr {
-                        max_addr = end;
-                    }
+    // Вычисляет нужный размер bitmap по entries
+    fn calc_bitmap_size(entries: &[&limine::memmap::Entry]) -> (usize, usize) {
+        let mut max_addr: u64 = 0;
+        for entry in entries {
+            if entry.type_ == limine::memmap::MEMMAP_USABLE {
+                let end = entry.base + entry.length;
+                if end > max_addr {
+                    max_addr = end;
                 }
             }
+        }
 
-            self.total_pages = (max_addr / PAGE_SIZE) as usize;
-            self.bitmap_size = (self.total_pages + 7) / 8;
+        let total_pages = (max_addr / PAGE_SIZE) as usize;
+        let bitmap_size = (total_pages + 7) / 8;
+        (total_pages, bitmap_size)
+    }
 
+
+
+    pub unsafe fn init(&mut self, entries: &[&limine::memmap::Entry], hhdm_offset: u64) {
+        unsafe {
+            let (total_pages, bitmap_size) = Self::calc_bitmap_size(entries);
+            
             // Ищем первый Usable регион для bitmap
             let mut bitmap_phys: Option<u64> = None;
             for entry in entries.iter() {
@@ -66,7 +74,8 @@ impl BitmapAllocator {
 
             let bitmap_phys = bitmap_phys.expect("no space for bitmap");
 
-            // Виртуальный адрес = физический + HHDM смещение
+            self.total_pages = total_pages;
+            self.bitmap_size = bitmap_size;
             self.bitmap = (bitmap_phys + hhdm_offset) as *mut u8;
 
             // Помечаем всё как занятое
