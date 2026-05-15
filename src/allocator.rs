@@ -42,27 +42,42 @@ impl BitmapAllocator {
         unsafe {
             let mut max_addr: u64 = 0;
             for entry in entries {
-                let end = entry.base + entry.length;
-                if end > max_addr {
-                    max_addr = end;
+                if entry.type_ == limine::memmap::MEMMAP_USABLE {
+                    let end = entry.base + entry.length;
+                    if end > max_addr {
+                        max_addr = end;
+                    }
                 }
             }
 
             self.total_pages = (max_addr / PAGE_SIZE) as usize;
             self.bitmap_size = (self.total_pages + 7) / 8;
 
+            // Отладка: выводим размер bitmap и первые Usable регионы
+            crate::println!("bitmap_size = {} bytes", self.bitmap_size);
+            for entry in entries.iter() {
+                if entry.type_ == limine::memmap::MEMMAP_USABLE {
+                    crate::println!(
+                        "  usable: 0x{:x} len=0x{:x} ({}KB)",
+                        entry.base,
+                        entry.length,
+                        entry.length / 1024
+                    );
+                }
+            }
+
             // Ищем первый Usable регион для bitmap
-            let mut bitmap_phys: u64 = 0;
+            let mut bitmap_phys: Option<u64> = None;
             for entry in entries.iter() {
                 if entry.type_ == limine::memmap::MEMMAP_USABLE
                     && entry.length >= self.bitmap_size as u64
                 {
-                    bitmap_phys = entry.base;
+                    bitmap_phys = Some(entry.base);
                     break;
                 }
             }
 
-            assert!(bitmap_phys != 0, "no space for bitmap");
+            let bitmap_phys = bitmap_phys.expect("no space for bitmap");
 
             // Виртуальный адрес = физический + HHDM смещение
             self.bitmap = (bitmap_phys + hhdm_offset) as *mut u8;
