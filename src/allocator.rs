@@ -103,17 +103,10 @@ impl BitmapAllocator {
         entries: &[&limine::memmap::Entry],
         bitmap_size: usize,
     ) -> Option<u64> {
-        // Ищем первый Usable регион для bitmap
-        let mut bitmap_phys: Option<u64> = None;
-        for entry in entries.iter() {
-            if entry.type_ == limine::memmap::MEMMAP_USABLE
-                && entry.length >= bitmap_size as u64
-            {
-                bitmap_phys = Some(entry.base);
-                break;
-            }
-        }
-        bitmap_phys
+        entries.iter()
+            .find(|e| e.type_ == limine::memmap::MEMMAP_USABLE
+                && e.length >= bitmap_size as u64)
+            .map(|e| e.base)
     }
 
     // Заполняет bitmap по entries
