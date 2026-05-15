@@ -55,24 +55,29 @@ impl BitmapAllocator {
         (total_pages, bitmap_size)
     }
 
-
+    // Находит физический адрес для размещения bitmap
+    fn find_bitmap_location(
+        entries: &[&limine::memmap::Entry],
+        bitmap_size: usize,
+    ) -> Option<u64> {
+        // Ищем первый Usable регион для bitmap
+        let mut bitmap_phys: Option<u64> = None;
+        for entry in entries.iter() {
+            if entry.type_ == limine::memmap::MEMMAP_USABLE
+                && entry.length >= bitmap_size as u64
+            {
+                bitmap_phys = Some(entry.base);
+                break;
+            }
+        }
+        bitmap_phys
+    }
 
     pub unsafe fn init(&mut self, entries: &[&limine::memmap::Entry], hhdm_offset: u64) {
         unsafe {
             let (total_pages, bitmap_size) = Self::calc_bitmap_size(entries);
-            
-            // Ищем первый Usable регион для bitmap
-            let mut bitmap_phys: Option<u64> = None;
-            for entry in entries.iter() {
-                if entry.type_ == limine::memmap::MEMMAP_USABLE
-                    && entry.length >= self.bitmap_size as u64
-                {
-                    bitmap_phys = Some(entry.base);
-                    break;
-                }
-            }
-
-            let bitmap_phys = bitmap_phys.expect("no space for bitmap");
+            let bitmap_phys = Self::find_bitmap_location(entries, bitmap_size)
+                .expect("no space for bitmap");
 
             self.total_pages = total_pages;
             self.bitmap_size = bitmap_size;
