@@ -38,6 +38,49 @@ impl BitmapAllocator {
         }
     }
 
+    pub unsafe fn init(
+        &mut self,
+        entries: &[&limine::memmap::Entry],
+        hhdm_offset: u64
+    ) {
+        let (total_pages, bitmap_size) = Self::calc_bitmap_size(entries);
+        let bitmap_phys = Self::find_bitmap_location(entries, bitmap_size)
+            .expect("no space for bitmap");
+
+        self.total_pages = total_pages;
+        self.bitmap_size = bitmap_size;
+        self.bitmap = (bitmap_phys + hhdm_offset) as *mut u8;
+
+        unsafe { self.fill_bitmap(entries, bitmap_phys) }
+    }
+
+    pub fn alloc_frame(&mut self) -> Option<u64> {
+        for page in 0..self.total_pages {
+            if !self.test_bit(page) {
+                self.set_bit(page);
+                self.free_pages -= 1;
+                return Some(page as u64 * PAGE_SIZE);
+            }
+        }
+        None
+    }
+
+    pub fn free_frame(&mut self, addr: u64) {
+        let page = (addr / PAGE_SIZE) as usize;
+        assert!(page < self.total_pages, "free_frame: address out of range");
+        assert!(self.test_bit(page), "free_frame: page already free");
+        self.clear_bit(page);
+        self.free_pages += 1;
+    }
+
+    pub fn free_pages(&self) -> usize {
+        self.free_pages
+    }
+
+    pub fn total_pages(&self) -> usize {
+        self.total_pages
+    }
+
     // Вычисляет нужный размер bitmap по entries
     fn calc_bitmap_size(entries: &[&limine::memmap::Entry]) -> (usize, usize) {
         let mut max_addr: u64 = 0;
@@ -73,69 +116,39 @@ impl BitmapAllocator {
         bitmap_phys
     }
 
-    pub unsafe fn init(&mut self, entries: &[&limine::memmap::Entry], hhdm_offset: u64) {
+    // Заполняет bitmap по entries
+    unsafe fn fill_bitmap(
+        &mut self,
+        entries: &[&limine::memmap::Entry],
+        bitmap_phys: u64,
+    ) {
+        // Помечаем всё как занятое
         unsafe {
-            let (total_pages, bitmap_size) = Self::calc_bitmap_size(entries);
-            let bitmap_phys = Self::find_bitmap_location(entries, bitmap_size)
-                .expect("no space for bitmap");
-
-            self.total_pages = total_pages;
-            self.bitmap_size = bitmap_size;
-            self.bitmap = (bitmap_phys + hhdm_offset) as *mut u8;
-
-            // Помечаем всё как занятое
             core::ptr::write_bytes(self.bitmap, 0xFF, self.bitmap_size);
+        }
 
-            // Освобождаем Usable регионы
-            for entry in entries {
-                if entry.type_ == limine::memmap::MEMMAP_USABLE {
-                    let start_page = (entry.base / PAGE_SIZE) as usize;
-                    let end_page = ((entry.base + entry.length) / PAGE_SIZE) as usize;
-                    for page in start_page..end_page {
-                        self.clear_bit(page);
-                        self.free_pages += 1;
-                    }
-                }
-            }
-
-            // Помечаем страницы самого bitmap как занятые
-            let bitmap_end = bitmap_phys + self.bitmap_size as u64;
-            let start_page = (bitmap_phys / PAGE_SIZE) as usize;
-            let end_page = ((bitmap_end + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
-            for page in start_page..end_page {
-                if !self.test_bit(page) {
-                    self.set_bit(page);
-                    self.free_pages -= 1;
+        // Освобождаем Usable регионы
+        for entry in entries {
+            if entry.type_ == limine::memmap::MEMMAP_USABLE {
+                let start_page = (entry.base / PAGE_SIZE) as usize;
+                let end_page = ((entry.base + entry.length) / PAGE_SIZE) as usize;
+                for page in start_page..end_page {
+                    self.clear_bit(page);
+                    self.free_pages += 1;
                 }
             }
         }
-    }
 
-    pub fn alloc_frame(&mut self) -> Option<u64> {
-        for page in 0..self.total_pages {
+        // Помечаем страницы самого bitmap как занятые
+        let bitmap_end = bitmap_phys + self.bitmap_size as u64;
+        let start_page = (bitmap_phys / PAGE_SIZE) as usize;
+        let end_page = ((bitmap_end + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
+        for page in start_page..end_page {
             if !self.test_bit(page) {
                 self.set_bit(page);
                 self.free_pages -= 1;
-                return Some(page as u64 * PAGE_SIZE);
             }
         }
-        None
-    }
-
-    pub fn free_frame(&mut self, addr: u64) {
-        let page = (addr / PAGE_SIZE) as usize;
-        assert!(page < self.total_pages, "free_frame: address out of range");
-        assert!(self.test_bit(page), "free_frame: page already free");
-        self.clear_bit(page);
-        self.free_pages += 1;
-    }
-
-    pub fn free_pages(&self) -> usize {
-        self.free_pages
-    }
-
-    pub fn total_pages(&self) -> usize {
-        self.total_pages
     }
 }
 
