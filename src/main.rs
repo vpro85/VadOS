@@ -27,48 +27,27 @@ static HHDM: HhdmRequest = HhdmRequest::new();
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    println!("step 1: serial ok");
+    println!("vados kernel starting...");
 
-    let mmap = MEMORY_MAP.response();
-    println!("step 2: mmap response = {}", if mmap.is_some() { "OK" } else { "NONE" });
+    let mmap = MEMORY_MAP.response().expect("no memory map from Limine");
+    let hhdm_offset = HHDM.response().expect("no HHDM from Limine").offset;
 
-
-    let mmap = mmap.expect("no memory map from Limine");
-    let entries = mmap.entries();
-    println!("step 3: entries count = {}", entries.len());
-
-    let hhdm_offset = HHDM
-        .response()
-        .expect("no HHDM from Limine")
-        .offset;
-
-    println!("step 3.5: HHDM offset = 0x{:x}", hhdm_offset);
-
-    unsafe {
-        ALLOCATOR.init(entries, hhdm_offset);
-    }
-    println!("step 4: allocator init ok");
+    unsafe { ALLOCATOR.init(mmap.entries(), hhdm_offset) };
 
     println!(
         "Memory: {} MB free / {} MB total",
-        unsafe { ALLOCATOR.free_pages() } * 4 /1024,
-        unsafe { ALLOCATOR.total_pages() } * 4 /1024,
+        unsafe { ALLOCATOR.free_pages() } * 4 / 1024,
+        unsafe { ALLOCATOR.total_pages() } * 4 / 1024,
     );
 
-    // Тест: выделим три страницы и освободим одну
     let a = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");
     let b = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");
     let c = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");
-
     println!("Allocated: 0x{:x}, 0x{:x}, 0x{:x}", a, b, c);
 
     unsafe { ALLOCATOR.free_frame(b) };
-    println!("Freed:     0x{:x}", b);
-
     let d = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");
-    println!("Allocated: 0x{:x}", d);
-
-    println!("Free pages after test: {}", unsafe { ALLOCATOR.free_pages() });
+    println!("Freed 0x{:x}, reallocated as 0x{:x}", b, d);
 
     loop {}
 }

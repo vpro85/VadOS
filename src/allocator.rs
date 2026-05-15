@@ -53,19 +53,6 @@ impl BitmapAllocator {
             self.total_pages = (max_addr / PAGE_SIZE) as usize;
             self.bitmap_size = (self.total_pages + 7) / 8;
 
-            // Отладка: выводим размер bitmap и первые Usable регионы
-            crate::println!("bitmap_size = {} bytes", self.bitmap_size);
-            for entry in entries.iter() {
-                if entry.type_ == limine::memmap::MEMMAP_USABLE {
-                    crate::println!(
-                        "  usable: 0x{:x} len=0x{:x} ({}KB)",
-                        entry.base,
-                        entry.length,
-                        entry.length / 1024
-                    );
-                }
-            }
-
             // Ищем первый Usable регион для bitmap
             let mut bitmap_phys: Option<u64> = None;
             for entry in entries.iter() {
