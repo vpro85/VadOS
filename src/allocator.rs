@@ -1,4 +1,5 @@
 const PAGE_SIZE: u64 = 4096;
+const BITS_PER_BYTE: usize = 8;
 
 pub struct BitmapAllocator {
     bitmap: *mut u8,
@@ -20,24 +21,24 @@ impl BitmapAllocator {
     fn set_bit(&mut self, page: usize) {
         debug_assert!(page < self.total_pages, "set_bit out of range");
         unsafe {
-            let byte = self.bitmap.add(page / 8);
-            *byte |= 1 << (page % 8);
+            let byte = self.bitmap.add(page / BITS_PER_BYTE);
+            *byte |= 1 << (page % BITS_PER_BYTE);
         }
     }
 
     fn clear_bit(&mut self, page: usize) {
         debug_assert!(page < self.total_pages, "clear_bit out of range");
         unsafe {
-            let byte = self.bitmap.add(page / 8);
-            *byte &= !(1 << (page % 8));
+            let byte = self.bitmap.add(page / BITS_PER_BYTE);
+            *byte &= !(1 << (page % BITS_PER_BYTE));
         }
     }
 
     fn test_bit(&self, page: usize) -> bool {
         debug_assert!(page < self.total_pages, "test_bit out of range");
         unsafe {
-            let byte = self.bitmap.add(page / 8);
-            (*byte >> (page % 8)) & 1 == 1
+            let byte = self.bitmap.add(page / BITS_PER_BYTE);
+            (*byte >> (page % BITS_PER_BYTE)) & 1 == 1
         }
     }
 
@@ -97,7 +98,7 @@ impl BitmapAllocator {
         }
 
         let total_pages = (max_addr / PAGE_SIZE) as usize;
-        let bitmap_size = (total_pages + 7) / 8;
+        let bitmap_size = (total_pages + BITS_PER_BYTE - 1) / BITS_PER_BYTE;
         (total_pages, bitmap_size)
     }
 
