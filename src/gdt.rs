@@ -27,10 +27,12 @@ impl Descriptor {
     /// Дескриптор сегмента данных
     pub const fn kernel_data() -> Self {
         // Биты:
+        // 40:      1 = accessed
         // 41:      1 = writeable
         // 44:      1 = descriptor type
         // 47:      1 = present
         Self(
+            (1 << 40) | // accessed (некоторые CPU требуют)
             (1 << 41) | // writeable
             (1 << 44) | // descriptor type
             (1 << 47)   // present
@@ -52,7 +54,7 @@ pub struct Gdt {
 
 /// Структура которую процессор читает через lgdt
 #[repr(C, packed)]
-pub struct GetDescriptor {
+pub struct GetRegister {
     limit: u16,     // размер таблицы - 1
     base: u64,      // виртуальный адрес таблицы
 }
@@ -66,8 +68,8 @@ impl Gdt {
         }
     }
 
-    pub fn descriptor(&self) -> GetDescriptor {
-        GetDescriptor {
+    pub fn descriptor(&self) -> GetRegister {
+        GetRegister {
             limit: (core::mem::size_of::<Gdt>() - 1) as u16,
             base: self as *const _ as u64,
         }
@@ -76,35 +78,23 @@ impl Gdt {
 
 /// Загружает GDT в процессор и обновляет сегментные регистры
 pub fn load(gdt: &'static Gdt) {
-    // static mut здесь безопасен - вызывается один раз при старте
-    static mut DESCRIPTOR: GetDescriptor = GetDescriptor {limit: 0, base: 0 };
+    // Безопасно: load() вызывается ровно один раз до запуска
+    // любых других потоков, гонок быть не может
+    static mut GDTR: GetRegister = GetRegister {limit: 0, base: 0 };
 
     unsafe {
-        DESCRIPTOR = gdt.descriptor();
-    }
+        GDTR = gdt.descriptor();
+        core::arch::asm!("lgdt [{}]", in(reg) &raw const GDTR);
 
-    unsafe {
         core::arch::asm!(
-        // Загружаем адрес GdtDescriptor в регистр GDTR
-        "lgdt [{}]",
-        in(reg) &raw const DESCRIPTOR,
+            "mov ss, {zero:x}",
+            "mov ds, {zero:x}",
+            "mov es, {zero:x}",
+            "mov fs, {zero:x}",
+            "mov gs, {zero:x}",
+            zero = in(reg) 0u16,
         );
-    }
 
-    unsafe {
-        // Обновляем сегментные регистры данных
-        core::arch::asm!(
-        "mov ss, {zero:x}",
-        "mov ds, {zero:x}",
-        "mov es, {zero:x}",
-        "mov fs, {zero:x}",
-        "mov gs, {zero:x}",
-        zero = in(reg) 0u16,
-        );
-    }
-
-    unsafe {
-        // Обновляем CS через far jump
         core::arch::asm!(
             "sub rsp, 16",
             "mov qword ptr [rsp + 8], {code}",
