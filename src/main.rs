@@ -7,6 +7,7 @@ use limine::BaseRevision;
 
 pub mod allocator;
 pub mod serial;
+pub mod gdt;
 
 // Говорим Limine, что поддерживаем протокол версии 3
 #[used]
@@ -25,9 +26,14 @@ static ALLOCATOR: allocator::AllocatorCell = allocator::AllocatorCell::new();
 #[used]
 static HHDM: HhdmRequest = HhdmRequest::new();
 
+static GDT: gdt::Gdt = gdt::Gdt::new();
+
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
     println!("VadOS kernel starting...");
+
+    gdt::load(&GDT);
+    println!("GDT loaded");
 
     let mmap = MEMORY_MAP.response().expect("no memory map from Limine");
     let hhdm_offset = HHDM.response().expect("no HHDM from Limine").offset;
