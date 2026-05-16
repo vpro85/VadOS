@@ -27,7 +27,7 @@ static HHDM: HhdmRequest = HhdmRequest::new();
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    println!("vados kernel starting...");
+    println!("VadOS kernel starting...");
 
     let mmap = MEMORY_MAP.response().expect("no memory map from Limine");
     let hhdm_offset = HHDM.response().expect("no HHDM from Limine").offset;
