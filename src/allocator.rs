@@ -18,6 +18,7 @@ impl BitmapAllocator {
     }
 
     fn set_bit(&mut self, page: usize) {
+        debug_assert!(page < self.total_pages, "set_bit out of range");
         unsafe {
             let byte = self.bitmap.add(page / 8);
             *byte |= 1 << (page % 8);
@@ -25,6 +26,7 @@ impl BitmapAllocator {
     }
 
     fn clear_bit(&mut self, page: usize) {
+        debug_assert!(page < self.total_pages, "clear_bit out of range");
         unsafe {
             let byte = self.bitmap.add(page / 8);
             *byte &= !(1 << (page % 8));
@@ -32,6 +34,7 @@ impl BitmapAllocator {
     }
 
     fn test_bit(&self, page: usize) -> bool {
+        debug_assert!(page < self.total_pages, "test_bit out of range");
         unsafe {
             let byte = self.bitmap.add(page / 8);
             (*byte >> (page % 8)) & 1 == 1
@@ -151,6 +154,8 @@ pub struct AllocatorCell {
 
 unsafe impl Sync for AllocatorCell {}
 
+/// Все методы unsafe: вызывающий гарантирует отсутствие гонок.
+/// В ядре используется только из одного потока до инициализации SMP.
 impl AllocatorCell {
     pub const fn new() -> Self {
         Self {
