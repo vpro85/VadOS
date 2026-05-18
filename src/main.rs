@@ -8,9 +8,10 @@ use limine::request::{BootloaderInfoRequest, HhdmRequest, MemmapRequest};
 
 pub mod allocator;
 pub mod gdt;
+pub mod heap;
 pub mod idt;
 pub mod serial;
-mod vmm;
+pub mod vmm;
 
 // Говорим Limine, что поддерживаем протокол версии 3
 #[used]
@@ -32,6 +33,8 @@ static HHDM: HhdmRequest = HhdmRequest::new();
 static GDT: gdt::Gdt = gdt::Gdt::new();
 
 static IDT: idt::IdtCell = idt::IdtCell::new();
+
+extern crate alloc;
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
@@ -57,6 +60,35 @@ extern "C" fn _start() -> ! {
         unsafe { ALLOCATOR.free_pages() } * 4 / 1024,
         unsafe { ALLOCATOR.total_pages() } * 4 / 1024,
     );
+
+    // Мапим страницы под кучу
+    let heap_pages = heap::HEAP_SIZE / 4096;
+    for i in 0..heap_pages {
+        let phys = unsafe { ALLOCATOR.alloc_frame() }.expect("heap: out of memory");
+        let virt = heap::HEAP_START + i * 4096;
+        unsafe {
+            vmm::map_page(
+                virt,
+                phys,
+                vmm::flags::PRESENT | vmm::flags::WRITABLE,
+                hhdm_offset,
+            );
+        }
+    }
+    println!("Heap initialized: {} MB", heap::HEAP_SIZE / 1024 / 1024);
+
+    // Тест кучи
+    use alloc::boxed::Box;
+    use alloc::vec::Vec;
+
+    let b = Box::new(42u64);
+    println!("Box: {}", b);
+
+    let mut v: Vec<u64> = Vec::new();
+    for i in 0..5 {
+        v.push(i * i);
+    }
+    println!("Vec: {:?}", v);
 
     // Тест виртуальной памяти:
     // выделим физическую страницу и замапим её по произвольному виртуальному адресу
