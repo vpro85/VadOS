@@ -3,13 +3,14 @@
 #![no_main]
 
 use core::panic::PanicInfo;
-use limine::request::{BootloaderInfoRequest, HhdmRequest, MemmapRequest};
 use limine::BaseRevision;
+use limine::request::{BootloaderInfoRequest, HhdmRequest, MemmapRequest};
 
 pub mod allocator;
-pub mod serial;
 pub mod gdt;
 pub mod idt;
+pub mod serial;
+mod vmm;
 
 // Говорим Limine, что поддерживаем протокол версии 3
 #[used]
@@ -48,16 +49,36 @@ extern "C" fn _start() -> ! {
     }
     println!("IDT loaded");
 
-    let mmap = MEMORY_MAP.response().expect("no memory map from Limine");
     let hhdm_offset = HHDM.response().expect("no HHDM from Limine").offset;
-
+    let mmap = MEMORY_MAP.response().expect("no memory map from Limine");
     unsafe { ALLOCATOR.init(mmap.entries(), hhdm_offset) };
-
     println!(
         "Memory: {} MB free / {} MB total",
         unsafe { ALLOCATOR.free_pages() } * 4 / 1024,
         unsafe { ALLOCATOR.total_pages() } * 4 / 1024,
     );
+
+    // Тест виртуальной памяти:
+    // выделим физическую страницу и замапим её по произвольному виртуальному адресу
+    let phys = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");
+    let virt = 0xffff_9000_0000_0000u64; // произвольный адрес в верхней половине
+
+    unsafe {
+        vmm::map_page(
+            virt,
+            phys,
+            vmm::flags::PRESENT | vmm::flags::WRITABLE,
+            hhdm_offset,
+        )
+    }
+
+    // Пишем в вирткальный адрес и читаем обратно
+    unsafe {
+        let ptr = virt as *mut u64;
+        *ptr = 0xDEADBEEFu64;
+        let val = *ptr;
+        println!("vmm test: wrote 0xDEADBEEF, read 0x{:x}", val);
+    }
 
     let a = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");
     let b = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");
