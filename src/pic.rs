@@ -16,7 +16,7 @@ pub const PIC1_OFFSET: u8 = 0x20; // IRQ0-7 -> векторы 0x20-0x27
 pub const PIC2_OFFSET: u8 = 0x28; // IRQ8-15 -> векторы 0x28-0x2F
 
 /// Записать байт в порт
-unsafe fn outb(port: u16, value: u8) {
+pub unsafe fn outb(port: u16, value: u8) {
     unsafe {
         core::arch::asm!(
         "out dx, al",
@@ -84,6 +84,6 @@ pub unsafe fn end_of_interrupt(irq: u8) {
         if irq >= 8 {
             outb(PIC2_COMMAND, PIC_EOI);
         }
-        outb(PIC1_DATA, PIC_EOI);
+        outb(PIC1_COMMAND, PIC_EOI);
     }
 }

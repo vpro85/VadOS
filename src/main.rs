@@ -10,9 +10,10 @@ pub mod allocator;
 pub mod gdt;
 pub mod heap;
 pub mod idt;
+pub mod pic;
+pub mod pit;
 pub mod serial;
 pub mod vmm;
-pub mod pic;
 
 // Говорим Limine, что поддерживаем протокол версии 3
 #[used]
@@ -52,6 +53,18 @@ extern "C" fn _start() -> ! {
         IDT.load();
     }
     println!("IDT loaded");
+
+    unsafe {
+        IDT.set_handler(0x20, idt::handler_timer as *const () as u64);
+    }
+
+    unsafe { pic::init() };
+    unsafe { pit::init() };
+    println!("PIC and PIT initialized");
+
+    // Включаем прерывания
+    unsafe { core::arch::asm!("sti") };
+    println!("Interrupts enabled");
 
     let hhdm_offset = HHDM.response().expect("no HHDM from Limine").offset;
     let mmap = MEMORY_MAP.response().expect("no memory map from Limine");
@@ -122,7 +135,18 @@ extern "C" fn _start() -> ! {
     let d = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");
     println!("Freed 0x{:x}, reallocated as 0x{:x}", b, d);
 
-    loop {}
+    let mut last_sec = 0u64;
+    loop {
+        let ticks = idt::TICKS.load(core::sync::atomic::Ordering::Relaxed);
+        let sec = ticks / pit::PIT_FREQ as u64;
+
+        if sec != last_sec {
+            println!("Uptime: {} sec (ticks: {})", sec, ticks);
+            last_sec = sec;
+        }
+
+        unsafe { core::arch::asm!("hlt") };
+    }
 }
 
 #[panic_handler]
