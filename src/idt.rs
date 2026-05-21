@@ -2,13 +2,13 @@
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub struct IdtEntry {
-    offset_low: u16,    // биты 15:0 адреса обработчика
-    selector: u16,      // селектор сегмента кода
-    ist: u8,            // interrupt stack table (0 = не используем)
-    flags: u8,          // type + DPL + present
-    offset_mid: u16,    // биты 31:16 адреса обработчика
-    offset_high: u32,   // биты 63:32 адреса обработчика
-    _reserved: u32,     // всегда 0
+    offset_low: u16,  // биты 15:0 адреса обработчика
+    selector: u16,    // селектор сегмента кода
+    ist: u8,          // interrupt stack table (0 = не используем)
+    flags: u8,        // type + DPL + present
+    offset_mid: u16,  // биты 31:16 адреса обработчика
+    offset_high: u32, // биты 63:32 адреса обработчика
+    _reserved: u32,   // всегда 0
 }
 
 impl IdtEntry {
@@ -89,7 +89,10 @@ pub extern "x86-interrupt" fn handler_divide_error(frame: InterruptFrame) {
 
 /// Обработчик general protection fault (с error code)
 pub extern "x86-interrupt" fn handler_gpf(frame: InterruptFrame, error: u64) {
-    panic!("General protection fault at 0x{:x}, error=0x{:x}", frame.rip, error);
+    panic!(
+        "General protection fault at 0x{:x}, error=0x{:x}",
+        frame.rip, error
+    );
 }
 
 /// Обработчик page fault (с error code)
@@ -122,4 +125,16 @@ impl IdtCell {
     pub fn load(&'static self) {
         unsafe { (*self.inner.get()).load() }
     }
+}
+
+use core::sync::atomic::{AtomicU64, Ordering};
+
+/// Счетчик тиков таймера
+pub static TICKS: AtomicU64 = AtomicU64::new(0);
+
+/// Обработчик IRQ0 - таймер
+pub extern "x86-interrupt" fn handler_timer(frame: InterruptFrame) {
+    let _ = frame;
+    TICKS.fetch_add(1, Ordering::Relaxed);
+    unsafe { crate::pic::end_of_interrupt(0) };
 }
