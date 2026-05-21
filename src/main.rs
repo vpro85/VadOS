@@ -12,6 +12,7 @@ pub mod heap;
 pub mod idt;
 pub mod serial;
 pub mod vmm;
+pub mod pic;
 
 // Говорим Limine, что поддерживаем протокол версии 3
 #[used]
