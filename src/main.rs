@@ -91,6 +91,8 @@ extern "C" fn _start() -> ! {
     }
     println!("Heap initialized: {} MB", heap::HEAP_SIZE / 1024 / 1024);
 
+    unsafe { heap::ALLOCATOR_HEAP.init() };
+
     // Тест кучи
     use alloc::boxed::Box;
     use alloc::vec::Vec;
