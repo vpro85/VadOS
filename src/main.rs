@@ -106,6 +106,35 @@ extern "C" fn _start() -> ! {
     }
     println!("Vec: {:?}", v);
 
+    // Тест кучи 2
+    let mut v1: Vec<u64> = Vec::with_capacity(1000);
+    for i in 0..1000 {
+        v1.push(i);
+    }
+    println!("v1 allocated: {} elements", v1.len());
+
+    let mut v2: Vec<u64> = Vec::with_capacity(1000);
+    for i in 0..1000 {
+        v2.push(i * 2);
+    }
+    println!("v2 allocated: {} elements", v2.len());
+
+    drop(v1); // освобождаем v1
+    println!("v1 dropped");
+
+    // Выделяем снова - должно переиспользовать память от v1
+    let mut v3: Vec<u64> = Vec::with_capacity(1000);
+    for i in 0..1000 {
+        v3.push(i * 3);
+    }
+    println!(
+        "v3 allocated: {} elements, first={} last={}",
+        v3.len(),
+        v3[0],
+        v3[999]
+    );
+    println!("Heap allocator test passed");
+
     // Тест виртуальной памяти:
     // выделим физическую страницу и замапим её по произвольному виртуальному адресу
     let phys = unsafe { ALLOCATOR.alloc_frame() }.expect("alloc failed");

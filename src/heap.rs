@@ -60,10 +60,8 @@ unsafe impl GlobalAlloc for LinkedListAllocator {
                 let block_addr = block as usize;
 
                 // Считаем выровненный адрес начала данных
-                let data_start = Self::align_up(
-                    block_addr + core::mem::size_of::<FreeBlock>(),
-                    align,
-                );
+                let data_start =
+                    Self::align_up(block_addr + core::mem::size_of::<FreeBlock>(), align);
                 let data_end = data_start + size;
                 let block_end = block_addr + core::mem::size_of::<FreeBlock>() + (*block).size;
 
